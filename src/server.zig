@@ -17,7 +17,7 @@ const routes = [_]struct {
 } {
     .{
         .router = "/api/weather",
-        .fun = &controller.NASAPrediction,
+        .fun = &controller.NASAPredictio,
         .type = .POST,
     },
 };

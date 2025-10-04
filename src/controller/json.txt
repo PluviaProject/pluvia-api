@@ -1,0 +1,17 @@
+{
+	"temporalAverage": {
+		"temperature": 23,
+		"windSpeed": 30,
+		"precipitationPercentage": 0,
+	},
+	"projectionAverage": {
+		"temperature": 23,
+		"windSpeed": 30,
+		"precipitationPercentage": 0,
+	},
+	"description": "Gfgj gsdfjgh sdlgkj dslgkj dslf",
+	"insights": [
+		"Use guarda chuva",
+		"Use casaco"
+	]
+}

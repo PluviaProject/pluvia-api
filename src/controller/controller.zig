@@ -1,5 +1,6 @@
 const std: type = @import("root").std;
 const httpz: type = @import("root").httpz;
+const curl: type = @import("root").curl;
 
 const allocator = @import("root").allocator;
 
@@ -95,7 +96,7 @@ fn parseRequestData(json_body: []const u8) anyerror!PredictionRequest {
         if (desc_value == .string) desc_value.string else return error.InvalidDescription
     else return error.MissingDescription;
 
-    return PredictionRequest{
+    return PredictionRequest {
         .date = date,
         .place = Place{
             .coordinates = Coordinates{
@@ -106,6 +107,32 @@ fn parseRequestData(json_body: []const u8) anyerror!PredictionRequest {
         },
         .description = description,
     };
+}
+
+fn getJsonNASAPrediction() !void {
+    const ca_bundle = try curl.allocCABundle(allocator);
+    defer ca_bundle.deinit();
+    const easy = try curl.Easy.init(.{
+        .ca_bundle = ca_bundle,
+    });
+    defer easy.deinit();
+    var buffer: []u8 = try allocator.alloc(u8, comptime 1024 * 1024 * 2);
+    defer allocator.free(buffer);
+    for(0..buffer.len) |i| {
+        buffer[i] = 0;
+    }
+    var writer = std.Io.Writer.fixed(buffer);
+    _ = try easy.fetch("https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M,WS10M,PRECTOT&community=AG&longitude=-51.15&latitude=-29.14&start=20250101&end=20251010&format=JSON"
+        , .{
+        .writer = &writer,
+    });
+    const someJson: []u8 = try allocator.alloc(u8, writer.end);
+    buffer.len = writer.end;
+    @memcpy(someJson, buffer);
+    std.debug.print("{s}\n", .{
+        someJson
+    });
+    while(true) {}
 }
 
 pub fn NASAPrediction(req: *httpz.Request, res: *httpz.Response) anyerror!void {
@@ -119,6 +146,8 @@ pub fn NASAPrediction(req: *httpz.Request, res: *httpz.Response) anyerror!void {
     _ = try parseRequestData(req.body() orelse {
         res.status = 400; return;
     });
+
+    try getJsonNASAPrediction();
 
     const v = parsed.value;
     const param_map = v.object

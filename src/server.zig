@@ -17,7 +17,7 @@ const routes = [_]struct {
 } {
     .{
         .router = "/api/weather",
-        .fun = &controller.NASAPredictio,
+        .fun = &controller.NASAPrediction,
         .type = .POST,
     },
 };
@@ -26,7 +26,7 @@ pub fn server_init() anyerror!Server_T {
     return @call(.never_inline, Server_T.init, .{
         allocator,
         httpz.Config {
-            .address = "191.252.92.87",
+            .address = "10.9.6.92",
             .port = 8080,
         },
         {}

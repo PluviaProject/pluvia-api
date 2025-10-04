@@ -1,42 +1,23 @@
-const pg: type = @import("pg");
-const std: type = @import("std");
-const httpz: type = @import("httpz");
+const internal: type = @import("root.zig");
 
-const allocator = gpa.allocator();
-var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
+pub const std: type = @import("std");
+pub const httpz: type = @import("httpz");
+pub const curl: type = @import("curl");
+
+pub const service: type = internal.service;
+pub const repository: type = internal.repository;
+pub const controller: type = internal.controller;
+pub const server: type = internal.server;
+
+pub const Server_T: type = httpz.Server(void);
+
+pub const allocator = @import("allocator.zig").allocator;
 
 pub fn main() anyerror!void {
-    var server = try httpz.Server(void).init(allocator, .{.port = 5882}, {});
-    var router = try server.router(.{});
-    defer {
-        server.stop();
-        server.deinit();
-    }
-    const pool = try pg.Pool.init(allocator, .{
-        .connect = .{
-            .port = "",
-            .host = "",
-        },
-        .auth = .{
-            .username = "postgres",
-            .database = "postgres",
-            .password = "postgres",
-            .timeout = 10_000,
-        }
-    });
-    const result = try pool.query(
-        \\
+    try @constCast((try @call(.always_inline, server.routes_load, .{
+        @constCast(&(try @call(.always_inline, server.server_init, .{
 
-        ,.{
-
-        }
-    );
-    result.column_names
-    router.get("/api/user/:id", getUser, .{});
-    // try server.listen();
+        })))
+    }))).listen();
 }
 
-fn getUser(req: *httpz.Request, res: *httpz.Response) anyerror!void {
-  res.status = 200;
-  try res.json(.{.id = req.param("id").?, .name = "Teg"}, .{});
-}

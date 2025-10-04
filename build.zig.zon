@@ -36,9 +36,9 @@
             .url = "git+https://github.com/karlseguin/http.zig#00014146eaf9e17750b752fa4905f7623fbe30f7",
             .hash = "httpz-0.0.0-PNVzrFndBgDr9zQx7Mj_MFiqYslgcRlx45FJ_gERmRTb",
         },
-        .pg = .{
-            .url = "git+https://github.com/karlseguin/pg.zig?ref=master#275c31d71a6e597c59fbeeac0fa409176e68ab66",
-            .hash = "pg-0.0.0-Wp_7gfctBgDqwQeDUvgpYeFe7VMR9T0ovGrTSXtSdQeV",
+        .curl = .{
+            .url = "https://github.com/jiacai2050/zig-curl/archive/refs/tags/v0.3.2.tar.gz",
+            .hash = "curl-0.3.2-P4tT4SXPAACuV6f5eyh4jG_1SspjWwMm_vRJfoKrQep5",
         },
     },
     .paths = .{

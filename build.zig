@@ -7,16 +7,10 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
         .target = target,
     });
-    const httpz = b.dependency("httpz", .{
-        .target = target,
-        .optmize = optimize,
-    });
-    const pg = b.dependency("pg", .{
-        .target = target,
-        .optmize = optimize,
-    });
+    const httpz = b.dependency("httpz", .{});
+    const curl = b.dependency("curl", .{});
     const exe = b.addExecutable(.{
-        .name = "http",
+        .name = "PluviaAPI",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
@@ -26,10 +20,9 @@ pub fn build(b: *std.Build) void {
                     .name = "httpz",
                     .module = httpz.module("httpz")
                 },
-
                 .{
-                    .name = "pg",
-                    .module = pg.module("pg"),
+                    .name = "curl",
+                    .module = curl.module("curl")
                 },
             },
         }),

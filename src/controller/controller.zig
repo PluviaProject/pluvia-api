@@ -108,11 +108,6 @@ fn parseRequestData(json_body: []const u8) anyerror!PredictionRequest {
     };
 }
 
-pub fn NASAPredictio(_: *httpz.Request, res: *httpz.Response) anyerror!void {
-    res.body = @embedFile("json.txt");
-}
-
-
 pub fn NASAPrediction(req: *httpz.Request, res: *httpz.Response) anyerror!void {
     errdefer {
         res.status = 500;

@@ -26,7 +26,7 @@ pub fn server_init() anyerror!Server_T {
     return @call(.never_inline, Server_T.init, .{
         allocator,
         httpz.Config {
-            .address = "10.9.6.92",
+            .address = "191.252.92.87",
             .port = 8080,
         },
         {}

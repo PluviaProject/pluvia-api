@@ -100,11 +100,6 @@ fn getJsonAI(
     const someJson: []u8 = try allocator.alloc(u8, writer.end);
     buffer.len = writer.end;
     @memcpy(someJson, buffer);
-    std.debug.print("{s}\n", .{
-        someJson
-    });
-    while(true) {
-    }
     return someJson;
 }
 
@@ -159,25 +154,20 @@ pub fn NASAPrediction(req: *httpz.Request, res: *httpz.Response) anyerror!void {
         .precipitationPercentage = @intFromFloat(results.p_sum / @as(f64, @floatFromInt(results.count / 3)))
     };
 
-    _ = try @call(.always_inline, getJsonAI, .{
+    const IAJson = try @call(.always_inline, getJsonAI, .{
         requestParsed, ret
     });
 
+    const IARespParsed: controller.types.AIResp_T = try @call(.always_inline, controller.utils.parseRequestData, .{
+        IAJson,
+        controller.types.AIResp_T
+    });
+
     try res.json(.{
-        .temporalAverage = .{
-            .temperature = ret.temperature,
-            .windSpeed = ret.windSpeed,
-            .precipitationPercentage = ret.precipitationPercentage,
-        },
-        .projectionAverage = .{
-            .temperature = 23,
-            .windSpeed = 30,
-            .precipitationPercentage = 0,
-        },
-        .description = "poqwekmaçcnaçkasd",
-        .insights = [_][]const u8 {
-            "Use guarda chuva",
-            "Use casaco",
-        },
+        .temperature = ret.temperature,
+        .windSpeed = ret.windSpeed,
+        .precipitationPercentage = ret.precipitationPercentage,
+        .description = IARespParsed.description,
+        .insights = IARespParsed.insights,
     }, .{});
 }

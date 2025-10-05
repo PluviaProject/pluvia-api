@@ -13,6 +13,11 @@ pub const TemporalInfo_T: type = struct {
     precipitationPercentage: u32,
 };
 
+pub const AIResp_T: type = struct {
+    description: []const u8,
+    insights: [][]const u8,
+};
+
 pub const Coord_T: type = enum {
     lat,
     lon,

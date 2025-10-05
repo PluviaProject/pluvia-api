@@ -29,28 +29,24 @@ const routes = [_]struct {
 };
 
 pub fn main() anyerror!void {
-    var server = try Server_T.init(allocator, .{
+    var server = try httpz.Server(void).init(allocator, .{
             .address = "191.252.92.87",
             .port = 8080,
         },
         {}
     );
     defer server.deinit();
-    const cors = try Server_T.middleware(&server, httpz.middleware.Cors, .{
+    const cors = try server.middleware(httpz.middleware.Cors, .{
         .origin = "*",
+        .methods = "GET, POST, PUT, DELETE, OPTIONS",
+        .max_age = "86400",
     });
-    const router = try server.router(.{});
+    var router = try server.router(.{.middlewares = &.{cors}});
     inline for(routes) |r| {
         switch(r.type) {
             .GET => router.get(r.router, r.fun, .{
-                .middlewares = &.{
-                    cors
-                }
             }),
             .POST => router.post(r.router, r.fun, .{
-                .middlewares = &.{
-                    cors
-                }
             }),
         }
     }

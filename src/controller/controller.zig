@@ -105,6 +105,9 @@ fn getJsonAI(
 
 pub fn NASAPrediction(req: *httpz.Request, res: *httpz.Response) anyerror!void {
     errdefer {
+        std.debug.print("Request Failed <{s}>\n", .{
+            res.conn.address.any.data
+        });
         res.status = 500;
     }
 
@@ -117,6 +120,10 @@ pub fn NASAPrediction(req: *httpz.Request, res: *httpz.Response) anyerror!void {
         requestParsed.date
     });
 
+    std.debug.print("[PluviaAPI]: Entry In NASA API <{s}>\n", .{
+        res.conn.address.any.data
+    });
+
     const NASAJson = try @call(.always_inline, getJsonNASAHistory, .{
         start,
         end,
@@ -126,6 +133,10 @@ pub fn NASAPrediction(req: *httpz.Request, res: *httpz.Response) anyerror!void {
         requestParsed.place.coordinates[
             @intFromEnum(controller.types.Coord_T.lon)
         ]
+    });
+
+    std.debug.print("[PluviaAPI]: NASA API OK <{s}>\n", .{
+        res.conn.address.any.data
     });
 
     const parsed = try std.json.parseFromSlice(std.json.Value, allocator, NASAJson, .{});
@@ -154,12 +165,20 @@ pub fn NASAPrediction(req: *httpz.Request, res: *httpz.Response) anyerror!void {
         .precipitationPercentage = @intFromFloat(results.p_sum / @as(f64, @floatFromInt(results.count / 3)))
     };
 
-    const IAJson = try @call(.always_inline, getJsonAI, .{
+    std.debug.print("[PluviaAPI]: Entry In Pluvia AI API <{s}>\n", .{
+        res.conn.address.any.data
+    });
+
+    const AIJson = try @call(.always_inline, getJsonAI, .{
         requestParsed, ret
     });
 
+    std.debug.print("[PluviaAPI]: Pluvia AI OK <{s}>\n", .{
+        res.conn.address.any.data
+    });
+
     const IARespParsed: controller.types.AIResp_T = try @call(.always_inline, controller.utils.parseRequestData, .{
-        IAJson,
+        AIJson,
         controller.types.AIResp_T
     });
 
@@ -170,4 +189,8 @@ pub fn NASAPrediction(req: *httpz.Request, res: *httpz.Response) anyerror!void {
         .description = IARespParsed.description,
         .insights = IARespParsed.insights,
     }, .{});
+
+    std.debug.print("[PluviaAPI]: Request OK <{s}>\n", .{
+        res.conn.address.any.data
+    });
 }

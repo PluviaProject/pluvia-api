@@ -1,0 +1,16 @@
+{
+  "date": "{s}",
+  "place": {
+    "coordinates": [
+      {any},
+      {any}
+    ],
+    "address": "{s}"
+    },
+    "description": "{s}",
+    "temporalAverage": {
+      "temperature": {d},
+      "windSpeed": {d},
+      "precipitationPercentage": {d}
+    }
+}

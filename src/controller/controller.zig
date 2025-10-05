@@ -1,138 +1,111 @@
 const std: type = @import("root").std;
 const httpz: type = @import("root").httpz;
 const curl: type = @import("root").curl;
+const controller: type = @import("root").controller;
 
 const allocator = @import("root").allocator;
 
-fn accumulate(param: *const std.json.Value, suffix: []const u8, sum_ptr: *f64, count_ptr: *usize) void {
-    // Mudança aqui: use switch em vez de verificar json_type
-    switch (param.*) {
-        .object => |obj| {
-            var it = obj.iterator();
-            while (it.next()) |entry| {
-                const date = entry.key_ptr.*;
-                if (std.mem.endsWith(u8, date, suffix)) {
-                    // Mudança aqui: acesse o valor float de forma diferente
-                    switch (entry.value_ptr.*) {
-                        .float => |val| {
-                            if (val != -999.0) { // ignora dados faltantes
-                                sum_ptr.* += val;
-                                count_ptr.* += 1;
-                            }
-                        },
-                        .integer => |val| {
-                            const float_val = @as(f64, @floatFromInt(val));
-                            if (float_val != -999.0) {
-                                sum_ptr.* += float_val;
-                                count_ptr.* += 1;
-                            }
-                        },
-                        else => continue,
-                    }
-                }
-            }
-        },
-        else => return,
-    }
-}
-
-const Coordinates = struct {
-    latitude: f64,
-    longitude: f64,
-};
-
-const Place = struct {
-    coordinates: Coordinates,
-    address: []const u8,
-};
-
-const PredictionRequest = struct {
-    date: []const u8,
-    place: Place,
-    description: []const u8,
-};
-
-fn parseRequestData(json_body: []const u8) anyerror!PredictionRequest {
-    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_body, .{});
-    defer parsed.deinit();
-
-    const root = parsed.value;
-
-    const date = if (root.object.get("date")) |date_value|
-        if (date_value == .string) date_value.string else return error.InvalidDate
-    else return error.MissingDate;
-
-    const place_obj = if (root.object.get("place")) |place_value|
-        if (place_value == .object) place_value.object else return error.InvalidPlace
-    else return error.MissingPlace;
-
-    const coordinates_array = if (place_obj.get("coordinates")) |coords_value|
-        if (coords_value == .array) coords_value.array else return error.InvalidCoordinates
-    else return error.MissingCoordinates;
-
-    if (coordinates_array.items.len != 2) return error.InvalidCoordinatesLength;
-
-    const latitude = if (coordinates_array.items[0] == .number_string)
-        try std.fmt.parseFloat(f64, coordinates_array.items[0].number_string)
-    else if (coordinates_array.items[0] == .integer)
-        @as(f64, @floatFromInt(coordinates_array.items[0].integer))
-    else if (coordinates_array.items[0] == .float)
-        coordinates_array.items[0].float
-    else return error.InvalidLatitude;
-
-    const longitude = if (coordinates_array.items[1] == .number_string)
-        try std.fmt.parseFloat(f64, coordinates_array.items[1].number_string)
-    else if (coordinates_array.items[1] == .integer)
-        @as(f64, @floatFromInt(coordinates_array.items[1].integer))
-    else if (coordinates_array.items[1] == .float)
-        coordinates_array.items[1].float
-    else return error.InvalidLongitude;
-
-    const address = if (place_obj.get("address")) |addr_value|
-        if (addr_value == .string) addr_value.string else return error.InvalidAddress
-    else return error.MissingAddress;
-
-    const description = if (root.object.get("description")) |desc_value|
-        if (desc_value == .string) desc_value.string else return error.InvalidDescription
-    else return error.MissingDescription;
-
-    return PredictionRequest {
-        .date = date,
-        .place = Place{
-            .coordinates = Coordinates{
-                .latitude = latitude,
-                .longitude = longitude,
-            },
-            .address = address,
-        },
-        .description = description,
-    };
-}
-
-fn getJsonNASAPrediction() !void {
+fn getJsonNASAHistory(
+    start: []const u8,
+    end: []const u8,
+    lat: f64,
+    lon: f64
+) anyerror![]const u8 {
     const ca_bundle = try curl.allocCABundle(allocator);
-    defer ca_bundle.deinit();
     const easy = try curl.Easy.init(.{
         .ca_bundle = ca_bundle,
     });
-    defer easy.deinit();
     var buffer: []u8 = try allocator.alloc(u8, comptime 1024 * 1024 * 2);
-    defer allocator.free(buffer);
+    const falseSize: usize = buffer.len;
     for(0..buffer.len) |i| {
         buffer[i] = 0;
     }
+    const url: []const u8 = try @call(.never_inline, std.fmt.allocPrint, .{
+        allocator,
+        "https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M,WS10M,PRECTOT&community=AG&longitude={any}&latitude={any}&start={s}&end={s}&format=JSON",
+        .{
+            lon, lat, start, end
+        }
+    });
     var writer = std.Io.Writer.fixed(buffer);
-    _ = try easy.fetch("https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M,WS10M,PRECTOT&community=AG&longitude=-51.15&latitude=-29.14&start=20250101&end=20251010&format=JSON"
-        , .{
+    const resp = try easy.fetch(@ptrCast(url), .{
         .writer = &writer,
     });
+    defer {
+        buffer.len = falseSize;
+        allocator.free(buffer);
+        ca_bundle.deinit();
+        easy.deinit();
+    }
+    const someJson: []u8 = try allocator.alloc(u8, writer.end);
+    buffer.len = writer.end;
+    @memcpy(someJson, buffer);
+    return if(resp.status_code != 200) error.InternalError else someJson;
+}
+
+fn getJsonAI(
+    req: controller.types.RequestParser_T,
+    hist: controller.types.TemporalInfo_T,
+) anyerror![]const u8 {
+    const url: []const u8 = "https://pluvia-ai-service.igor-faoro17.workers.dev/weather/insights";
+    const ca_bundle = try curl.allocCABundle(allocator);
+    const easy = try curl.Easy.init(.{
+        .ca_bundle = ca_bundle,
+    });
+    var buffer: []u8 = try allocator.alloc(u8, comptime 1024 * 32);
+    const falseSize: usize = buffer.len;
+    var writer = std.Io.Writer.fixed(buffer);
+    const body = try std.fmt.allocPrint(allocator,
+        \\{{
+        \\    "date": "{s}",
+        \\    "place": {{
+        \\        "coordinates": [
+        \\            {any},
+        \\            {any}
+        \\        ],
+        \\        "address": "{s}"
+        \\    }},
+        \\    "description": "{s}",
+        \\    "temporalAverage": {{
+        \\        "temperature": {d},
+        \\        "windSpeed": {d},
+        \\        "precipitationPercentage": {d}
+        \\    }}
+        \\}}
+    , .{
+        req.date,
+        req.place.coordinates[
+            @intFromEnum(controller.types.Coord_T.lat)
+        ],
+        req.place.coordinates[
+            @intFromEnum(controller.types.Coord_T.lon)
+        ],
+        req.place.address,
+        req.description,
+        hist.temperature,
+        hist.windSpeed,
+        hist.precipitationPercentage,
+    });
+    _ = try easy.fetch(@ptrCast(url), .{
+        .writer = &writer,
+        .body = body,
+        .method = .POST,
+    });
+    defer {
+        buffer.len = falseSize;
+        allocator.free(buffer);
+        ca_bundle.deinit();
+        easy.deinit();
+    }
     const someJson: []u8 = try allocator.alloc(u8, writer.end);
     buffer.len = writer.end;
     @memcpy(someJson, buffer);
     std.debug.print("{s}\n", .{
         someJson
     });
-    while(true) {}
+    while(true) {
+    }
+    return someJson;
 }
 
 pub fn NASAPrediction(req: *httpz.Request, res: *httpz.Response) anyerror!void {
@@ -140,17 +113,29 @@ pub fn NASAPrediction(req: *httpz.Request, res: *httpz.Response) anyerror!void {
         res.status = 500;
     }
 
-    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, req.body().?, .{});
-    defer parsed.deinit();
-
-    _ = try parseRequestData(req.body() orelse {
-        res.status = 400; return;
+    const requestParsed: controller.types.RequestParser_T = try @call(.always_inline, controller.utils.parseRequestData, .{
+        req.body() orelse try @call(.always_inline, controller.utils.internalError, .{}),
+        controller.types.RequestParser_T
     });
 
-    try getJsonNASAPrediction();
+    const start: []const u8, const end: []const u8 = try @call(.always_inline, controller.utils.requestDateResolve, .{
+        requestParsed.date
+    });
 
-    const v = parsed.value;
-    const param_map = v.object
+    const NASAJson = try @call(.always_inline, getJsonNASAHistory, .{
+        start,
+        end,
+        requestParsed.place.coordinates[
+            @intFromEnum(controller.types.Coord_T.lat)
+        ],
+        requestParsed.place.coordinates[
+            @intFromEnum(controller.types.Coord_T.lon)
+        ]
+    });
+
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, NASAJson, .{});
+    const root = parsed.value;
+    const param_map = root.object
         .get("properties").?
         .object.get("parameter").?
         .object;
@@ -162,33 +147,37 @@ pub fn NASAPrediction(req: *httpz.Request, res: *httpz.Response) anyerror!void {
         count: usize = 0,
     }{};
 
-    const date_suffix = "0210";
+    const dateSuffix: []const u8 = start[4..start.len];
 
-    accumulate(&param_map.get("WS10M").?, date_suffix, &results.ws_sum, &results.count);
-    accumulate(&param_map.get("T2M").?, date_suffix, &results.t_sum, &results.count);
-    accumulate(&param_map.get("PRECTOTCORR").?, date_suffix, &results.p_sum, &results.count);
+    controller.utils.accumulate(&param_map.get("WS10M").?, dateSuffix, &results.ws_sum, &results.count);
+    controller.utils.accumulate(&param_map.get("T2M").?, dateSuffix, &results.t_sum, &results.count);
+    controller.utils.accumulate(&param_map.get("PRECTOTCORR").?, dateSuffix, &results.p_sum, &results.count);
 
-    const years = r: {
-        if(results.count == 0) {
-            res.status = 404; return;
-        }
-        break :r results.count;
+    const ret: controller.types.TemporalInfo_T = .{
+        .windSpeed = @intFromFloat(results.ws_sum / @as(f64, @floatFromInt(results.count / 3))),
+        .temperature = @intFromFloat(results.t_sum / @as(f64, @floatFromInt(results.count / 3))),
+        .precipitationPercentage = @intFromFloat(results.p_sum / @as(f64, @floatFromInt(results.count / 3)))
     };
 
-    const ret: struct {
-        ws_avg: u32,
-        t_avg: u32,
-        p_avg: u32,
+    _ = try @call(.always_inline, getJsonAI, .{
+        requestParsed, ret
+    });
 
-    } = .{
-        .ws_avg = @intFromFloat(results.ws_sum / @as(f64, @floatFromInt(years))),
-        .t_avg = @intFromFloat(results.t_sum / @as(f64, @floatFromInt(years))),
-        .p_avg = @intFromFloat(results.p_sum / @as(f64, @floatFromInt(years))),
-
-    };
     try res.json(.{
-        .temperature = ret.t_avg,
-	.windSpeed = ret.ws_avg,
-	.precipitationPercentage = ret.p_avg,
+        .temporalAverage = .{
+            .temperature = ret.temperature,
+            .windSpeed = ret.windSpeed,
+            .precipitationPercentage = ret.precipitationPercentage,
+        },
+        .projectionAverage = .{
+            .temperature = 23,
+            .windSpeed = 30,
+            .precipitationPercentage = 0,
+        },
+        .description = "poqwekmaçcnaçkasd",
+        .insights = [_][]const u8 {
+            "Use guarda chuva",
+            "Use casaco",
+        },
     }, .{});
 }
